@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { supabase } from './src/lib/supabase';
 import { COLORS } from './src/lib/theme';
+import { AppContext } from './src/lib/AppContext';
 
 // Screens
 import LandingScreen from './src/screens/LandingScreen';
@@ -41,12 +42,12 @@ function UserTabs() {
         tabBarActiveTintColor: COLORS.cyan,
         tabBarInactiveTintColor: COLORS.muted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const icons = {
-            Home: focused ? 'home' : 'home-outline',
-            Register: focused ? 'car' : 'car-outline',
-            Sessions: focused ? 'list' : 'list-outline',
-            Profile: focused ? 'person' : 'person-outline',
+            Home:     focused ? 'home'   : 'home-outline',
+            Register: focused ? 'car'    : 'car-outline',
+            Sessions: focused ? 'list'   : 'list-outline',
+            Profile:  focused ? 'person' : 'person-outline',
           };
           return <Ionicons name={icons[route.name]} size={22} color={color} />;
         },
@@ -61,6 +62,8 @@ function UserTabs() {
 }
 
 // ── Admin bottom tabs ─────────────────────────────────────────────────────
+// Fix: removed the (now-unused) onLogout prop — logout is handled via AppContext
+// in ProfileScreen directly, so no prop-drilling is needed.
 function AdminTabs() {
   return (
     <Tab.Navigator
@@ -79,19 +82,19 @@ function AdminTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarIcon: ({ focused, color }) => {
           const icons = {
-            AdminHome: focused ? 'grid' : 'grid-outline',
-            Vehicles: focused ? 'car' : 'car-outline',
-            ManualEntry: focused ? 'add-circle' : 'add-circle-outline',
-            AdminProfile: focused ? 'settings' : 'settings-outline',
+            AdminHome:    focused ? 'grid'        : 'grid-outline',
+            Vehicles:     focused ? 'car'         : 'car-outline',
+            ManualEntry:  focused ? 'add-circle'  : 'add-circle-outline',
+            AdminProfile: focused ? 'settings'    : 'settings-outline',
           };
           return <Ionicons name={icons[route.name]} size={22} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="AdminHome"    component={AdminDashboard}  options={{ tabBarLabel: 'Dashboard' }} />
-      <Tab.Screen name="Vehicles"     component={VehiclesScreen}  options={{ tabBarLabel: 'Vehicles' }} />
+      <Tab.Screen name="AdminHome"    component={AdminDashboard}   options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="Vehicles"     component={VehiclesScreen}   options={{ tabBarLabel: 'Vehicles' }} />
       <Tab.Screen name="ManualEntry"  component={ManualEntryScreen} options={{ tabBarLabel: 'Manual Entry' }} />
-      <Tab.Screen name="AdminProfile" component={ProfileScreen}   options={{ tabBarLabel: 'Settings' }} />
+      <Tab.Screen name="AdminProfile" component={ProfileScreen}    options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );
 }
@@ -106,11 +109,22 @@ export default function App() {
       setSession(session);
       setLoading(false);
     });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      // If a Supabase session ends (regular user signed out), clear any stale admin flag.
+      // Admin login is local-only (MOCK_ADMIN), so a missing Supabase session while
+      // isAdmin=true is perfectly valid — we only clear isAdmin via handleAdminLogout.
     });
+
     return () => subscription.unsubscribe();
   }, []);
+
+  // Fix: exposed via AppContext so ProfileScreen (inside AdminTabs) can call it directly
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    setSession(null);
+  };
 
   if (loading) {
     return (
@@ -122,48 +136,43 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <NavigationContainer
-        theme={{
-          dark: true,
-          colors: {
-            primary: COLORS.cyan,
-            background: COLORS.bg,
-            card: COLORS.surface,
-            text: COLORS.text,
-            border: COLORS.border,
-            notification: COLORS.cyan,
-          },
-        }}
-      >
-        <StatusBar style="light" backgroundColor={COLORS.bg} />
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!session && !isAdmin ? (
-            <>
-              <Stack.Screen name="Landing">
-                {(props) => (
-                  <LandingScreen
-                    {...props}
-                    onAdminLogin={() => setIsAdmin(true)}
-                  />
-                )}
-              </Stack.Screen>
-              <Stack.Screen name="Signup" component={SignupScreen} />
-            </>
-          ) : isAdmin ? (
-            <Stack.Screen name="AdminTabs">
-              {(props) => (
-                <AdminTabs
-                  {...props}
-                  onLogout={() => { setIsAdmin(false); setSession(null); }}
-                />
-              )}
-            </Stack.Screen>
-          ) : (
-            <Stack.Screen name="UserTabs" component={UserTabs} />
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <AppContext.Provider value={{ isAdmin, handleAdminLogout }}>
+      <SafeAreaProvider>
+        <NavigationContainer
+          theme={{
+            dark: true,
+            colors: {
+              primary:      COLORS.cyan,
+              background:   COLORS.bg,
+              card:         COLORS.surface,
+              text:         COLORS.text,
+              border:       COLORS.border,
+              notification: COLORS.cyan,
+            },
+          }}
+        >
+          <StatusBar style="light" backgroundColor={COLORS.bg} />
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {!session && !isAdmin ? (
+              <>
+                <Stack.Screen name="Landing">
+                  {(props) => (
+                    <LandingScreen
+                      {...props}
+                      onAdminLogin={() => setIsAdmin(true)}
+                    />
+                  )}
+                </Stack.Screen>
+                <Stack.Screen name="Signup" component={SignupScreen} />
+              </>
+            ) : isAdmin ? (
+              <Stack.Screen name="AdminTabs" component={AdminTabs} />
+            ) : (
+              <Stack.Screen name="UserTabs" component={UserTabs} />
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </AppContext.Provider>
   );
 }

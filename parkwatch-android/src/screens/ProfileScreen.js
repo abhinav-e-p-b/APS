@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, Alert, Image,
@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { AppContext } from '../lib/AppContext';
 import { COLORS } from '../lib/theme';
 import { Card, Button, SectionTitle } from '../components/UI';
 
@@ -14,54 +15,89 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Fix: read admin state from context so we know which logout path to use
+  const { isAdmin, handleAdminLogout } = useContext(AppContext);
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       setUser(user);
       const { data } = await supabase
-        .from('users').select('name, phone, role').eq('id', user.id).single();
+        .from('users')
+        .select('name, phone, role')
+        .eq('id', user.id)
+        .single();
       setProfile(data);
     });
   }, []);
 
+  // Fix: admin uses local logout (AppContext), regular users use Supabase signOut
   async function handleSignOut() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out', style: 'destructive',
-        onPress: async () => { await supabase.auth.signOut(); },
+        onPress: async () => {
+          setLoading(true);
+          try {
+            if (isAdmin) {
+              // Admin is NOT authenticated through Supabase — calling
+              // supabase.auth.signOut() would be a no-op. Use context instead.
+              handleAdminLogout();
+            } else {
+              await supabase.auth.signOut();
+            }
+          } catch (err) {
+            Alert.alert('Error', err.message || 'Could not sign out.');
+          } finally {
+            setLoading(false);
+          }
+        },
       },
     ]);
   }
 
-  const infoRows = [
-    { icon: 'person-outline',   label: 'Name',    value: profile?.name || user?.user_metadata?.full_name || '—' },
-    { icon: 'mail-outline',     label: 'Email',   value: user?.email || '—' },
-    { icon: 'call-outline',     label: 'Phone',   value: profile?.phone || '—' },
-    { icon: 'shield-outline',   label: 'Role',    value: profile?.role || 'user' },
-  ];
+  const infoRows = isAdmin
+    ? [
+        { icon: 'shield-outline',  label: 'Role',    value: 'Administrator' },
+        { icon: 'person-outline',  label: 'ID',      value: 'admin' },
+        { icon: 'lock-closed-outline', label: 'Auth', value: 'Local (mock)' },
+      ]
+    : [
+        { icon: 'person-outline', label: 'Name',  value: profile?.name || user?.user_metadata?.full_name || '—' },
+        { icon: 'mail-outline',   label: 'Email', value: user?.email || '—' },
+        { icon: 'call-outline',   label: 'Phone', value: profile?.phone || '—' },
+        { icon: 'shield-outline', label: 'Role',  value: profile?.role || 'user' },
+      ];
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
         {/* Avatar header */}
         <View style={styles.avatarSection}>
-          {user?.user_metadata?.avatar_url ? (
+          {isAdmin ? (
+            <View style={[styles.avatarPlaceholder, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+              <Ionicons name="shield" size={40} color={COLORS.blue} />
+            </View>
+          ) : user?.user_metadata?.avatar_url ? (
             <Image source={{ uri: user.user_metadata.avatar_url }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Ionicons name="person" size={40} color={COLORS.muted} />
             </View>
           )}
+
           <Text style={styles.displayName}>
-            {profile?.name || user?.user_metadata?.full_name || 'User'}
+            {isAdmin ? 'Administrator' : (profile?.name || user?.user_metadata?.full_name || 'User')}
           </Text>
-          <Text style={styles.displayEmail}>{user?.email}</Text>
-          {profile?.role === 'admin' && (
-            <View style={styles.adminBadge}>
-              <Text style={styles.adminBadgeText}>🛡 Admin</Text>
-            </View>
-          )}
+          {!isAdmin && <Text style={styles.displayEmail}>{user?.email}</Text>}
+
+          <View style={isAdmin ? styles.adminBadge : styles.userBadge}>
+            <Text style={isAdmin ? styles.adminBadgeText : styles.userBadgeText}>
+              {isAdmin ? '🛡 Admin' : '👤 User'}
+            </Text>
+          </View>
         </View>
 
         {/* Info card */}
@@ -87,10 +123,10 @@ export default function ProfileScreen() {
         <SectionTitle title="App Info" />
         <Card>
           {[
-            { label: 'App Version',  value: '1.0.0' },
-            { label: 'Backend',      value: 'Supabase' },
-            { label: 'ANPR Engine',  value: 'YOLOv8 + PaddleOCR' },
-            { label: 'OCR Variants', value: '7 preprocessing modes' },
+            { label: 'App Version',   value: '1.0.0'                  },
+            { label: 'Backend',       value: 'Supabase'               },
+            { label: 'ANPR Engine',   value: 'YOLOv8 + PaddleOCR'    },
+            { label: 'OCR Variants',  value: '7 preprocessing modes'  },
           ].map((item, i) => (
             <View
               key={item.label}
@@ -104,7 +140,7 @@ export default function ProfileScreen() {
 
         {/* Sign out */}
         <Button
-          title="Sign Out"
+          title={loading ? 'Signing out…' : 'Sign Out'}
           onPress={handleSignOut}
           variant="danger"
           loading={loading}
@@ -117,14 +153,14 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.bg },
   scroll: { padding: 16, paddingBottom: 40 },
-  avatarSection: { alignItems: 'center', paddingVertical: 28 },
-  avatar: { width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: COLORS.border },
-  avatarPlaceholder: {
+  avatarSection:      { alignItems: 'center', paddingVertical: 28 },
+  avatar:             { width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: COLORS.border },
+  avatarPlaceholder:  {
     width: 90, height: 90, borderRadius: 45,
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  displayName:  { color: COLORS.text, fontSize: 20, fontWeight: '800', marginTop: 12 },
+  displayName:  { color: COLORS.text,  fontSize: 20, fontWeight: '800', marginTop: 12 },
   displayEmail: { color: COLORS.muted, fontSize: 13, marginTop: 4 },
   adminBadge: {
     marginTop: 10, backgroundColor: 'rgba(59,130,246,0.15)',
@@ -132,6 +168,12 @@ const styles = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4,
   },
   adminBadgeText: { color: COLORS.blue, fontSize: 12, fontWeight: '700' },
+  userBadge: {
+    marginTop: 10, backgroundColor: 'rgba(0,212,255,0.1)',
+    borderWidth: 1, borderColor: 'rgba(0,212,255,0.2)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4,
+  },
+  userBadgeText: { color: COLORS.cyan, fontSize: 12, fontWeight: '700' },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingVertical: 13,
@@ -144,5 +186,5 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   infoLabel: { color: COLORS.muted, fontSize: 13 },
-  infoValue: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
+  infoValue: { color: COLORS.text,  fontSize: 13, fontWeight: '600' },
 });
