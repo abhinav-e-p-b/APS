@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "ParkWatch",
+    "slug": "parkwatch",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D1B2A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.parkwatch.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D1B2A"
+      },
+      "package": "com.parkwatch.app",
+      "permissions": [
+        "CAMERA",
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "parkwatch",
+    "extra": {
+      "eas": {
+        "projectId": "25dea634-0c17-48de-9fbb-e51e412e4639"
+      }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}
