@@ -70,50 +70,53 @@ export default function LandingScreen({ navigation, onAdminLogin }) {
   }
 
   // ── Fix 2: Google OAuth – removed fragile internal QueryParams import ─────
-  async function handleGoogleLogin() {
-    setLoading(true);
-    try {
-      const redirectUrl = Linking.createURL('/auth/callback');
+  import { makeRedirectUri } from 'expo-auth-session';
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
-      });
-      if (error) throw error;
+// ... inside LandingScreen.js
 
-      if (!data?.url) throw new Error('No OAuth URL returned from Supabase.');
+async function handleGoogleLogin() {
+  setLoading(true);
+  try {
+    // Dynamically generates the correct URL for Expo Go, Dev Builds, or Production
+    const redirectUrl = makeRedirectUri({
+      scheme: 'parkwatch',
+      path: 'auth/callback',
+    });
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
+      },
+    });
 
-      if (result.type === 'success' && result.url) {
-        const params = parseOAuthUrl(result.url);
+    if (error) throw error;
+    if (!data?.url) throw new Error('No OAuth URL returned from Supabase.');
 
-        if (params.access_token) {
-          // Implicit grant – tokens in URL fragment
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token:  params.access_token,
-            refresh_token: params.refresh_token || '',
-          });
-          if (sessionError) throw sessionError;
-        } else if (params.code) {
-          // PKCE flow – exchange code for session
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(result.url);
-          if (exchangeError) throw exchangeError;
-        } else {
-          throw new Error('No access token or code found in redirect URL.');
-        }
-      } else if (result.type === 'cancel') {
-        // User dismissed the browser — silent, no alert needed
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+    if (result.type === 'success' && result.url) {
+      const params = parseOAuthUrl(result.url);
+
+      if (params.access_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token:  params.access_token,
+          refresh_token: params.refresh_token || '',
+        });
+        if (sessionError) throw sessionError;
+      } else if (params.code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(result.url);
+        if (exchangeError) throw exchangeError;
       }
-    } catch (err) {
-      Alert.alert('Sign-in failed', err.message || 'Could not sign in with Google.');
-    } finally {
-      setLoading(false);
     }
+  } catch (err) {
+    Alert.alert('Sign-in failed', err.message || 'Could not sign in with Google.');
+  } finally {
+    // ALWAYS reset loading to prevent the UI from freezing permanently
+    setLoading(false);
   }
+}
 
   return (
     <SafeAreaView style={styles.safe}>

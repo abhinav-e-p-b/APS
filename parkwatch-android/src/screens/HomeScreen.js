@@ -56,8 +56,11 @@ export default function HomeScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    try{
     await fetchData();
-    setRefreshing(false);
+    } finally{
+      setRefreshing(false);
+    }
   }, []);
 
   function fmtTime(iso) {

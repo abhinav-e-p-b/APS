@@ -1,14 +1,15 @@
+// Assuming you already have your COLORS exported here too
 export const COLORS = {
   bg: '#0D1B2A',
-  surface: '#132033',
-  border: '#1E3550',
-  accent: '#00e5a0',
-  blue: '#3b82f6',
+  surface: '#1B263B',
+  border: '#415A77',
+  text: '#E0E1DD',
+  muted: '#778DA9',
   cyan: '#00D4FF',
-  warn: '#f59e0b',
-  danger: '#ef4444',
-  text: '#e2e8f0',
-  muted: '#64748b',
+  blue: '#3B82F6',
+  accent: '#00E5A0',
+  warn: '#F59E0B',
+  danger: '#EF4444',
   white: '#FFFFFF',
 };
 
