@@ -253,7 +253,7 @@ export default function RegisterScreen() {
       if (payErr) throw payErr;
 
       setShowModal(false);
-      setBookingId('SP-' + booking.id.slice(0, 8).toUpperCase());
+      setBookingId('SP-' + (booking?.id?.slice(0, 8) ?? 'UNKNOWN').toUpperCase());
       setSuccess(true);
     } catch (err) {
       Alert.alert('Error', err.message || 'Payment failed. Try again.');

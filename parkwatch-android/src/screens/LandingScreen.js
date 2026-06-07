@@ -82,6 +82,21 @@ export default function LandingScreen({ navigation }) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(result.url);
           if (exchangeError) throw exchangeError;
         }
+
+        // Check if this is a new user who hasn't completed their profile yet
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('phone')
+            .eq('id', currentUser.id)
+            .single();
+          // If no phone number saved, route them to the profile completion screen
+          if (!profile?.phone) {
+            navigation.navigate('Signup');
+          }
+          // Otherwise App.js onAuthStateChange will handle routing to UserTabs/AdminTabs
+        }
       }
     } catch (err) {
       Alert.alert('Sign-in failed', err.message || 'Could not sign in with Google.');

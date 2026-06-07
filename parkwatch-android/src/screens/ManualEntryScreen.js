@@ -27,12 +27,17 @@ export default function ManualEntryScreen() {
         if (error) throw error;
         Alert.alert('Success', `${plate} marked as ENTERED.`);
       } else {
-        const { error } = await supabase.from('parking_sessions')
+        const { data: updatedRows, error } = await supabase.from('parking_sessions')
           .update({ status: 'exited', exit_time: new Date().toISOString() })
           .eq('plate', plate.toUpperCase().trim())
-          .eq('status', 'inside');
+          .eq('status', 'inside')
+          .select();
         if (error) throw error;
-        Alert.alert('Success', `${plate} marked as EXITED.`);
+        if (!updatedRows || updatedRows.length === 0) {
+          Alert.alert('Not Found', `${plate.toUpperCase()} is not currently marked as inside.`);
+        } else {
+          Alert.alert('Success', `${plate.toUpperCase()} marked as EXITED.`);
+        }
       }
       setPlate('');
     } catch (err) {

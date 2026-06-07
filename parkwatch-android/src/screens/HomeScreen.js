@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   RefreshControl, TouchableOpacity,
@@ -14,12 +14,12 @@ export default function HomeScreen({ navigation }) {
   const [occ,       setOcc]       = useState({ total: 0, occupied: 0, vacant: 0, pct: 0 });
   const [sessions,  setSessions]  = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const userIdRef = useRef(null); // ref so real-time callbacks always have current userId
 
   useEffect(() => {
-    let userId = null;
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        userId = user.id;
+        userIdRef.current = user.id; // store in ref so real-time callbacks are never stale
         setUser(user);
         fetchData(user.id);
       }
@@ -40,15 +40,15 @@ export default function HomeScreen({ navigation }) {
       )
       .subscribe();
 
-    // Still keep a slower interval for recent sessions or rely on events?
-    // Let's also subscribe to parking_sessions for real-time list updates!
+    // Subscribe to parking_sessions for real-time list updates
     const sessionsSubscription = supabase
       .channel('public:parking_sessions')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'parking_sessions' },
         () => {
-          fetchData(userId); // Re-fetch the sessions list when there's an entry/exit
+          // Use ref so this callback always reads the latest userId (fixes stale closure bug)
+          fetchData(userIdRef.current);
         }
       )
       .subscribe();
@@ -89,12 +89,12 @@ export default function HomeScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try{
-    await fetchData();
-    } finally{
+    try {
+      await fetchData(user?.id); // pass userId so the query is scoped correctly
+    } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [user]);
 
   function fmtTime(iso) {
     if (!iso) return '—';
