@@ -25,5 +25,3 @@ export const VEHICLE_TYPES = [
   { id: '4-wheeler', emoji: '🚗', label: '4-Wheeler' },
   { id: 'suv-van',   emoji: '🚙', label: 'SUV / Van' },
 ];
-
-export const MOCK_ADMIN = { id: 'admin', password: 'admin123' };

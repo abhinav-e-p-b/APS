@@ -33,8 +33,38 @@ export default function DashboardSection({ onViewAll }) {
 
   useEffect(() => {
     fetchDashboardData()
-    const interval = setInterval(fetchDashboardData, 30000)
-    return () => clearInterval(interval)
+    
+    // Set up Realtime subscriptions for live dashboard updates
+    const slotsChannel = supabase
+      .channel('dashboard-slots')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'parking_slots', filter: 'zone=eq.A' },
+        (payload) => {
+          const { total, occupied } = payload.new
+          setStats(prev => ({
+            ...prev,
+            availableSlots: Math.max(0, total - occupied),
+            totalSlots: total,
+            occupancyPercent: total ? Math.round((occupied / total) * 100) : 0,
+            currentlyInside: occupied
+          }))
+        }
+      )
+      .subscribe()
+
+    // Optionally also listen to parking_sessions for full reload
+    const sessionsChannel = supabase
+      .channel('dashboard-sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parking_sessions' }, () => {
+        fetchDashboardData() // Re-fetch to update "Total Vehicles Today" and "Currently Inside" if needed
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(slotsChannel)
+      supabase.removeChannel(sessionsChannel)
+    }
   }, [])
 
   async function fetchDashboardData() {

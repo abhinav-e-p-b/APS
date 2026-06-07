@@ -16,14 +16,47 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    let userId = null;
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
+        userId = user.id;
         setUser(user);
         fetchData(user.id);
       }
     });
-    const interval = setInterval(() => fetchData(), 30000);
-    return () => clearInterval(interval);
+
+    // Real-time subscription to parking_slots changes
+    const slotsSubscription = supabase
+      .channel('public:parking_slots')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'parking_slots', filter: 'zone=eq.A' },
+        (payload) => {
+          const { total, occupied } = payload.new;
+          const vacant = Math.max(0, total - occupied);
+          const pct = total ? Math.round((occupied / total) * 100) : 0;
+          setOcc({ total, occupied, vacant, pct });
+        }
+      )
+      .subscribe();
+
+    // Still keep a slower interval for recent sessions or rely on events?
+    // Let's also subscribe to parking_sessions for real-time list updates!
+    const sessionsSubscription = supabase
+      .channel('public:parking_sessions')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'parking_sessions' },
+        () => {
+          fetchData(userId); // Re-fetch the sessions list when there's an entry/exit
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(slotsSubscription);
+      supabase.removeChannel(sessionsSubscription);
+    };
   }, []);
 
   async function fetchData(userId) {

@@ -31,6 +31,27 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
+    
+    // Real-time subscription for admin dashboard
+    const channel = supabase
+      .channel('admin-dashboard-slots')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'parking_slots', filter: 'zone=eq.A' },
+        (payload) => {
+          const { total, occupied } = payload.new;
+          setStats({
+            total: total,
+            occupied: occupied,
+            vacant: Math.max(0, total - occupied)
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const onRefresh = useCallback(async () => {

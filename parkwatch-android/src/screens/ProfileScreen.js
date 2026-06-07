@@ -15,8 +15,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Fix: read admin state from context so we know which logout path to use
-  const { isAdmin, handleAdminLogout } = useContext(AppContext);
+  const { isAdmin } = useContext(AppContext);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -31,7 +30,6 @@ export default function ProfileScreen() {
     });
   }, []);
 
-  // Fix: admin uses local logout (AppContext), regular users use Supabase signOut
   async function handleSignOut() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -40,13 +38,7 @@ export default function ProfileScreen() {
         onPress: async () => {
           setLoading(true);
           try {
-            if (isAdmin) {
-              // Admin is NOT authenticated through Supabase — calling
-              // supabase.auth.signOut() would be a no-op. Use context instead.
-              handleAdminLogout();
-            } else {
-              await supabase.auth.signOut();
-            }
+            await supabase.auth.signOut();
           } catch (err) {
             Alert.alert('Error', err.message || 'Could not sign out.');
           } finally {
@@ -57,18 +49,12 @@ export default function ProfileScreen() {
     ]);
   }
 
-  const infoRows = isAdmin
-    ? [
-        { icon: 'shield-outline',  label: 'Role',    value: 'Administrator' },
-        { icon: 'person-outline',  label: 'ID',      value: 'admin' },
-        { icon: 'lock-closed-outline', label: 'Auth', value: 'Local (mock)' },
-      ]
-    : [
-        { icon: 'person-outline', label: 'Name',  value: profile?.name || user?.user_metadata?.full_name || '—' },
-        { icon: 'mail-outline',   label: 'Email', value: user?.email || '—' },
-        { icon: 'call-outline',   label: 'Phone', value: profile?.phone || '—' },
-        { icon: 'shield-outline', label: 'Role',  value: profile?.role || 'user' },
-      ];
+  const infoRows = [
+    { icon: 'person-outline', label: 'Name',  value: profile?.name || user?.user_metadata?.full_name || '—' },
+    { icon: 'mail-outline',   label: 'Email', value: user?.email || '—' },
+    { icon: 'call-outline',   label: 'Phone', value: profile?.phone || '—' },
+    { icon: 'shield-outline', label: 'Role',  value: isAdmin ? 'Administrator' : (profile?.role || 'user') },
+  ];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -76,11 +62,7 @@ export default function ProfileScreen() {
 
         {/* Avatar header */}
         <View style={styles.avatarSection}>
-          {isAdmin ? (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
-              <Ionicons name="shield" size={40} color={COLORS.blue} />
-            </View>
-          ) : user?.user_metadata?.avatar_url ? (
+          {user?.user_metadata?.avatar_url ? (
             <Image source={{ uri: user.user_metadata.avatar_url }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
@@ -89,9 +71,9 @@ export default function ProfileScreen() {
           )}
 
           <Text style={styles.displayName}>
-            {isAdmin ? 'Administrator' : (profile?.name || user?.user_metadata?.full_name || 'User')}
+            {profile?.name || user?.user_metadata?.full_name || 'User'}
           </Text>
-          {!isAdmin && <Text style={styles.displayEmail}>{user?.email}</Text>}
+          <Text style={styles.displayEmail}>{user?.email}</Text>
 
           <View style={isAdmin ? styles.adminBadge : styles.userBadge}>
             <Text style={isAdmin ? styles.adminBadgeText : styles.userBadgeText}>

@@ -20,9 +20,9 @@ export default function AuthCallback() {
         const user = session.user
 
         // Trigger auto-creates the users row — we just check if phone exists
-        const { data: existingUser } = await supabase
+        const { data: existingUser, error: dbError } = await supabase
           .from('users')
-          .select('id, phone')
+          .select('id, phone, role')
           .eq('id', user.id)
           .maybeSingle()
         if(dbError) {
@@ -31,7 +31,11 @@ export default function AuthCallback() {
           setTimeout(() => navigate('/'), 2000)
           return
         }
-        if (!existingUser?.phone) {
+        
+        if (existingUser?.role === 'admin') {
+          setStatus('Welcome Admin!')
+          setTimeout(() => navigate('/admin'), 800)
+        } else if (!existingUser?.phone) {
           setStatus('Almost there! Complete your profile...')
           setTimeout(() => navigate('/signup'), 800)
         } else {

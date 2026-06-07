@@ -338,7 +338,7 @@
           <button class="filter-tab" onclick="setFilter('exited',this)">Exited</button>
           <button class="filter-tab" onclick="setFilter('registered',this)">Registered</button>
         </div>
-        <span class="refresh-info" id="next-refresh">—</span>
+        <span class="refresh-info" id="next-refresh">Live Updates Active</span>
       </div>
     </div>
     <div class="sessions-scroll">
@@ -360,6 +360,9 @@
 
 </div>
 
+<!-- Load Supabase JS for Realtime WebSockets -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
 //  PASTE YOUR SUPABASE CREDENTIALS HERE
@@ -369,9 +372,9 @@ const SUPABASE_URL = "https://sqjrspgoaqueaxxmhxvu.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxanJzcGdvYXF1ZWF4eG1oeHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MTU0MjAsImV4cCI6MjA4OTQ5MTQyMH0.MC1ZGKAtziQPETjGO5ivYlOd586i0iGaT8gaoD6wkpQ";
 // ═══════════════════════════════════════════════════════════════════════════
 
-const REFRESH_SECS   = 10;
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 let   activeFilter   = "all";
-let   countdown      = REFRESH_SECS;
 let   cachedSessions = [];
 let   isConnected    = false;
 
@@ -545,20 +548,53 @@ function renderSessions(sessions) {
   }).join("");
 }
 
-// ── countdown & init ───────────────────────────────────────────────────────
+// ── Realtime & Init ────────────────────────────────────────────────────────
+    
+function setupRealtime() {
+  supabase
+    .channel('dashboard-static')
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'parking_slots', filter: 'zone=eq.A' },
+      (payload) => {
+        const { total, occupied } = payload.new;
+        const vacant = Math.max(0, total - occupied);
+        const pct    = total ? Math.round(occupied / total * 100) : 0;
 
-function tick() {
-  countdown--;
-  document.getElementById("next-refresh").textContent =
-    isConnected ? `refresh in ${countdown}s` : "retrying…";
-  if (countdown <= 0) {
-    countdown = REFRESH_SECS;
-    loadDashboard();
-  }
+        document.getElementById("stat-vacant").textContent   = vacant;
+        document.getElementById("stat-total").textContent    = `of ${total} total`;
+        document.getElementById("stat-occupied").textContent = occupied;
+        document.getElementById("stat-pct").textContent      = `${pct}% occupied`;
+        document.getElementById("gauge-pct").textContent     = `${pct}%`;
+        document.getElementById("bar-occ-label").textContent = `${occupied} / ${total}`;
+        document.getElementById("last-updated").textContent  = new Date().toLocaleTimeString("en-IN");
+
+        const circ   = 251.2;
+        const arc    = document.getElementById("gauge-arc");
+        arc.style.strokeDashoffset = circ - (circ * pct / 100);
+        arc.style.stroke = pct < 70 ? "var(--accent)" : pct < 90 ? "var(--warn)" : "var(--danger)";
+
+        const bar = document.getElementById("occ-bar");
+        bar.style.width      = `${pct}%`;
+        bar.style.background = pct < 70 ? "var(--accent)" : pct < 90 ? "var(--warn)" : "var(--danger)";
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'parking_sessions' },
+      () => {
+        // Re-fetch sessions on any session change
+        loadDashboard(); 
+      }
+    )
+    .subscribe();
 }
 
-loadDashboard();
-setInterval(tick, 1000);
+loadDashboard().then(() => {
+  if (isConnected && !isPlaceholder()) {
+    setupRealtime();
+  }
+});
 </script>
 </body>
 </html>

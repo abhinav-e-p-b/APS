@@ -105,26 +105,42 @@ export default function App() {
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
+    const fetchUserRole = async (currentSession) => {
+      if (!currentSession) {
+        setIsAdmin(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', currentSession.user.id)
+          .single();
+          
+        if (data && data.role === 'admin') {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error('Error fetching role:', err);
+        setIsAdmin(false);
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
+      fetchUserRole(session).finally(() => setLoading(false));
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      // If a Supabase session ends (regular user signed out), clear any stale admin flag.
-      // Admin login is local-only (MOCK_ADMIN), so a missing Supabase session while
-      // isAdmin=true is perfectly valid — we only clear isAdmin via handleAdminLogout.
+      fetchUserRole(session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Fix: exposed via AppContext so ProfileScreen (inside AdminTabs) can call it directly
-  const handleAdminLogout = () => {
-    setIsAdmin(false);
-    setSession(null);
-  };
 
   if (loading) {
     return (
@@ -136,7 +152,7 @@ export default function App() {
   }
 
   return (
-    <AppContext.Provider value={{ isAdmin, handleAdminLogout }}>
+    <AppContext.Provider value={{ isAdmin }}>
       <SafeAreaProvider>
         <NavigationContainer
           theme={{
@@ -153,16 +169,9 @@ export default function App() {
         >
           <StatusBar style="light" backgroundColor={COLORS.bg} />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            {!session && !isAdmin ? (
+            {!session ? (
               <>
-                <Stack.Screen name="Landing">
-                  {(props) => (
-                    <LandingScreen
-                      {...props}
-                      onAdminLogin={() => setIsAdmin(true)}
-                    />
-                  )}
-                </Stack.Screen>
+                <Stack.Screen name="Landing" component={LandingScreen} />
                 <Stack.Screen name="Signup" component={SignupScreen} />
               </>
             ) : isAdmin ? (
